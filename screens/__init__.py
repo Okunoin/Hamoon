@@ -1,9 +1,12 @@
-from .forms import MarkFormScreen, NoteEditScreen, TaskFormScreen
+from .forms import MarkFormScreen, NoteEditScreen, TaskFormScreen, SessionFormScreen, SubjectFormScreen
 from .subject import SubjectScreen
-from .top import CalendarScreen, NotesScreen, SubjectsScreen
+from .top import CalendarScreen, NotesScreen, SubjectsScreen, SessionsScreen
 
 # имя экрана -> класс. Первый в списке открывается при запуске.
 SCREENS = {
+    "sessions": SessionsScreen,
+    "session_form": SessionFormScreen,
+    "subject_form": SubjectFormScreen,
     "subjects": SubjectsScreen,
     "calendar": CalendarScreen,
     "notes": NotesScreen,

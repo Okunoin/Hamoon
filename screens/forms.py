@@ -115,6 +115,30 @@ class MarkFormScreen(FormScreen):
             self.swatches[c] = b
         g.add_widget(row)
         self._set_color(self.color)
+        if self.mark:
+            delete = PillButton(text="Удалить метку", fg=ERROR, outline=ERROR,
+                                size_hint_y=None, height=dp(48))
+            delete.bind(on_release=lambda *_: self.confirm_delete())
+            g.add_widget(delete)
+
+    def confirm_delete(self):
+        from kivy.uix.popup import Popup
+        box = BoxLayout(orientation="vertical", spacing=dp(12), padding=dp(12))
+        box.add_widget(Text("Удалить эту метку из календаря?", fs=15))
+        row = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(48))
+        cancel = PillButton(text="Отмена", fg=AC)
+        delete = PillButton(text="Удалить", fg=ERROR, outline=ERROR)
+        row.add_widget(cancel)
+        row.add_widget(delete)
+        box.add_widget(row)
+        popup = Popup(title="Удаление метки", content=box, size_hint=(0.92, None), height=dp(220))
+        cancel.bind(on_release=lambda *_: popup.dismiss())
+        def remove(*_):
+            store.delete_mark(self.mark["id"])
+            popup.dismiss()
+            app().back()
+        delete.bind(on_release=remove)
+        popup.open()
 
     def _set_color(self, color):
         self.color = color
@@ -162,4 +186,57 @@ class NoteEditScreen(FormScreen):
             store.update_note(self.note["id"], title=title, body=self.f_body.text)
         else:
             store.add_note(self.subject, title, self.f_body.text)
+        app().back()
+
+
+class SessionFormScreen(FormScreen):
+    title = "Новая сессия"
+    subtitle = "Например: Летняя сессия 2027"
+
+    def build_fields(self, g):
+        box, self.f_name = make_field("Название сессии", "")
+        g.add_widget(box)
+
+    def save(self):
+        try:
+            session = store.add_session(self.f_name.text)
+        except ValueError as exc:
+            return self.fail(str(exc))
+        store.select_session(session["id"])
+        app().open_root("subjects")
+
+
+class SubjectFormScreen(FormScreen):
+    def on_context(self, subject="", **ctx):
+        self.subject = subject
+        self.title = "Дата экзамена" if subject else "Новый предмет"
+        self.subtitle = subject or "Добавьте свой предмет"
+
+    def build_fields(self, g):
+        if not self.subject:
+            box, self.f_name = make_field("Название предмета", "")
+            g.add_widget(box)
+        exam = store.subject(self.subject)["exam"] if self.subject else None
+        box, self.f_exam = make_field("Дата экзамена (необязательно)",
+                                     fmt_input(exam) if exam else "", "ДД.ММ.ГГГГ")
+        g.add_widget(box)
+        clear = PillButton(text="Убрать дату экзамена", fg=AC, outline=AC,
+                           size_hint_y=None, height=dp(48))
+        clear.bind(on_release=lambda *_: setattr(self.f_exam, "text", ""))
+        g.add_widget(clear)
+        g.add_widget(Text("Без даты экзамен не отображается в календаре.",
+                          fs=13, color=MUTED, size_hint_y=None, height=dp(48)))
+
+    def save(self):
+        raw = self.f_exam.text.strip()
+        exam = parse_date(raw) if raw else None
+        if raw and exam is None:
+            return self.fail("Введите дату ДД.ММ.ГГГГ или оставьте поле пустым")
+        try:
+            if self.subject:
+                store.update_exam(self.subject, exam)
+            else:
+                store.add_subject(self.f_name.text, MARK_COLORS[len(store.subjects) % len(MARK_COLORS)], exam)
+        except ValueError as exc:
+            return self.fail(str(exc))
         app().back()

@@ -6,6 +6,8 @@ from kivy.utils import platform
 
 from screens import register_screens
 from theme import BG
+from store import store
+from pathlib import Path
 
 Window.clearcolor = BG
 if platform in ("android", "ios"):
@@ -18,6 +20,7 @@ class PlannerApp(App):
     title = "Планировщик сессии"
 
     def build(self):
+        store.load(Path(self.user_data_dir) / "planner.json")
         self.history = []   # стек пройденных экранов: [(имя, контекст), ...]
         self._ctx = {}      # контекст текущего экрана (например, предмет)
         self.sm = ScreenManager(transition=SlideTransition())
@@ -51,6 +54,7 @@ class PlannerApp(App):
         self._ctx = ctx
         self.sm.transition.direction = direction
         self.sm.current = name
+        screen.refresh()
 
     def _on_keyboard(self, window, key, *args):
         # 27 = системная кнопка «Назад» на Android (и Esc на компьютере)

@@ -1,11 +1,7 @@
-"""Данные приложения (пока только в памяти, без сохранения на диск).
-
-Здесь нет Kivy: цвета хранятся строками "#RRGGBB". Позже этот модуль можно
-заменить хранилищем на SQLite/JSON, не трогая экраны.
-"""
+"""Данные сессий и автоматическое сохранение в JSON; модуль не зависит от Kivy."""
 from datetime import date
 
-TODAY = date(2027, 1, 11)          # «сегодня» для примера; потом заменить на date.today()
+TODAY = date.today()
 PRIORITIES = ("Низкий", "Средний", "Высокий")
 MARK_COLORS = ("#1C2030", "#3B4CCA", "#0F766E", "#B45309", "#BE3455")
 
@@ -67,6 +63,73 @@ class Store:
         self.add_mark("Сдать справку в деканат", _d(16), "", "", MARK_COLORS[3])
         self.add_note("Матанализ", "Формулы интегрирования", "Таблица основных интегралов...")
         self.add_note("Матанализ", "Вопросы к экзамену", "")
+        self.sessions = [self._capture_session("Зимняя сессия 2027 (пример)")]
+        self.session_id = self.sessions[0]["id"]
+
+    @property
+    def current_session(self):
+        return next((s for s in self.sessions if s["id"] == self.session_id), None)
+
+    def _capture_session(self, name):
+        return {"id": self._next_id(), "name": name, "subjects": self.subjects,
+                "tasks": self.tasks, "marks": self.marks, "notes": self.notes}
+
+    def add_session(self, name):
+        name = name.strip()
+        if not name:
+            raise ValueError("Введите название сессии")
+        session = {"id": self._next_id(), "name": name, "subjects": [],
+                   "tasks": [], "marks": [], "notes": []}
+        self.sessions.append(session)
+        return session
+
+    def select_session(self, session_id):
+        session = next(s for s in self.sessions if s["id"] == session_id)
+        self.session_id = session_id
+        for key in ("subjects", "tasks", "marks", "notes"):
+            setattr(self, key, session[key])
+
+    def add_subject(self, name, color, exam=None):
+        name = name.strip()
+        if not name:
+            raise ValueError("Введите название предмета")
+        if any(s["name"].casefold() == name.casefold() for s in self.subjects):
+            raise ValueError("Такой предмет уже есть в этой сессии")
+        subject = {"name": name, "color": color, "exam": exam}
+        self.subjects.append(subject)
+        return subject
+
+    def delete_subject(self, name):
+        subject = self.subject(name)
+        self.subjects.remove(subject)
+        self.tasks[:] = [t for t in self.tasks if t["subject"] != name]
+        self.notes[:] = [n for n in self.notes if n["subject"] != name]
+
+    def update_exam(self, subject, exam):
+        self.subject(subject)["exam"] = exam
+
+    def delete_mark(self, mark_id):
+        self.marks.remove(self.mark(mark_id))
+
+    def save(self):
+        if not getattr(self, "path", None):
+            return
+        import json
+        data = {"seq": self._seq, "session_id": self.session_id, "sessions": self.sessions}
+        temporary = self.path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(data, ensure_ascii=False,
+                            default=lambda d: {"__date__": d.isoformat()}), encoding="utf-8")
+        temporary.replace(self.path)
+
+    def load(self, path):
+        import json
+        from pathlib import Path
+        self.path = Path(path)
+        if self.path.exists():
+            data = json.loads(self.path.read_text(encoding="utf-8"),
+                object_hook=lambda obj: date.fromisoformat(obj["__date__"]) if "__date__" in obj else obj)
+            self._seq, self.sessions = data["seq"], data["sessions"]
+            self.select_session(data["session_id"])
 
     def _next_id(self):
         self._seq += 1
@@ -80,7 +143,7 @@ class Store:
         return next((s for s in self.subjects if s["exam"] == day), None)
 
     def days_to_first_exam(self):
-        left = [(s["exam"] - TODAY).days for s in self.subjects if s["exam"] >= TODAY]
+        left = [(s["exam"] - TODAY).days for s in self.subjects if s["exam"] is not None and s["exam"] >= TODAY]
         return min(left) if left else None
 
     # --- дела ----------------------------------------------------------
@@ -151,5 +214,20 @@ class Store:
         return sorted((n for n in self.notes if n["subject"] == subject),
                       key=lambda n: -n["id"])
 
+
+# Сохраняем каждое изменение, в том числе при работе на телефоне.
+from functools import wraps
+
+def _persist(method):
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        result = method(self, *args, **kwargs)
+        self.save()
+        return result
+    return wrapped
+
+for _name in ("add_session", "select_session", "add_subject", "delete_subject", "update_exam", "delete_mark",
+              "add_task", "update_task", "set_done", "add_mark", "update_mark", "add_note", "update_note"):
+    setattr(Store, _name, _persist(getattr(Store, _name)))
 
 store = Store()

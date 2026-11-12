@@ -9,7 +9,7 @@ from kivy.uix.widget import Widget
 from theme import AC, AC_SOFT, CARD, INK, LINE, MUTED
 from widgets import Card, PillButton, Text
 
-NAV_TABS = (("subjects", "Предметы"), ("calendar", "Календарь"), ("notes", "Заметки"))
+NAV_TABS = (("subjects", "Предметы"), ("calendar", "Календарь"))
 
 
 def app():

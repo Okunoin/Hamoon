@@ -7,7 +7,7 @@ from kivy.utils import escape_markup, get_color_from_hex as hx
 
 from dates import fmt_long, fmt_short
 from store import store
-from theme import AC, CARD, MUTED
+from theme import AC, CARD, ERROR, MUTED
 from widgets import CardButton, Chip, PillButton, ProgressLine, Segmented, Text, Toggle, center
 from .base import BaseScreen, app
 
@@ -22,12 +22,24 @@ class SubjectScreen(BaseScreen):
     def on_context(self, subject="", tab="tasks", **ctx):
         self.subject, self.tab = subject, tab
         self.title = subject
-        self.subtitle = "Экзамен " + fmt_long(store.subject(subject)["exam"])
-        self.active_tab = "notes" if tab == "notes" else "subjects"
+        exam = store.subject(subject)["exam"]
+        self.subtitle = "Экзамен " + fmt_long(exam) if exam else "Дата экзамена не задана"
+        self.active_tab = "subjects"
 
     def build_body(self):
         if not self.subject:
             return
+        self.on_context(subject=self.subject, tab=self.tab)
+        self.subtitle_label.text = self.subtitle
+        actions = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(44))
+        edit = PillButton(text="Дата", fg=AC, outline=AC, size_hint=(1, 1))
+        edit.bind(on_release=lambda *_: app().open("subject_form", subject=self.subject))
+        delete = PillButton(text="Удалить предмет", fg=ERROR, outline=ERROR,
+                            font_size="14sp", size_hint=(1, 1))
+        delete.bind(on_release=lambda *_: self.confirm_delete())
+        actions.add_widget(edit)
+        actions.add_widget(delete)
+        self.body.add_widget(actions)
         color = hx(store.subject(self.subject)["color"])
         done, total = store.counts(self.subject)
         p = store.progress(self.subject)
@@ -54,9 +66,30 @@ class SubjectScreen(BaseScreen):
         add.bind(on_release=lambda *_: target())
         self.body.add_widget(add)
 
+    def confirm_delete(self):
+        from kivy.uix.popup import Popup
+        subject = self.subject
+        box = BoxLayout(orientation="vertical", spacing=dp(12), padding=dp(12))
+        box.add_widget(Text(f'Удалить предмет «{subject}»?\nЕго дела и заметки тоже будут удалены.', fs=15))
+        buttons = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(44))
+        cancel = PillButton(text="Отмена", fg=AC)
+        delete = PillButton(text="Удалить", fg=ERROR, outline=ERROR)
+        buttons.add_widget(cancel)
+        buttons.add_widget(delete)
+        box.add_widget(buttons)
+        popup = Popup(title="Удаление предмета", content=box,
+                      size_hint=(0.92, None), height=dp(250))
+        cancel.bind(on_release=lambda *_: popup.dismiss())
+        def remove(*_):
+            store.delete_subject(subject)
+            popup.dismiss()
+            app().open_root("subjects")
+        delete.bind(on_release=remove)
+        popup.open()
+
     def _switch(self, name):
         self.tab = "notes" if name == "Заметки" else "tasks"
-        self.active_tab = "notes" if self.tab == "notes" else "subjects"
+        self.active_tab = "subjects"
         self.refresh()
 
     # --- дела -------------------------------------------------------------

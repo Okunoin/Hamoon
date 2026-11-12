@@ -19,9 +19,24 @@ class SubjectsScreen(BaseScreen):
     subtitle = "Зимняя сессия 2027"
     active_tab = "subjects"
 
+    def refresh(self):
+        self.subtitle = store.current_session["name"]
+        super().refresh()
+
     def build_body(self):
         g = self.scroll()
+        switch = PillButton(text="< Выбрать сессию", fg=AC, outline=AC,
+                            size_hint_y=None, height=dp(44))
+        switch.bind(on_release=lambda *_: app().open_root("sessions"))
+        g.add_widget(switch)
         g.add_widget(self._overall())
+        add = PillButton(text="+ Добавить предмет", bg=AC, fg=WHITE,
+                         size_hint_y=None, height=dp(48))
+        add.bind(on_release=lambda *_: app().open("subject_form"))
+        g.add_widget(add)
+        if not store.subjects:
+            g.add_widget(Text("Предметов пока нет", fs=15, color=MUTED,
+                              size_hint_y=None, height=dp(40)))
         for s in store.subjects:
             g.add_widget(self._subject_card(s))
 
@@ -49,7 +64,7 @@ class SubjectsScreen(BaseScreen):
         row = BoxLayout(size_hint_y=None, height=dp(26), spacing=dp(10))
         row.add_widget(center(Marker(color)))
         row.add_widget(Text(s["name"], fs=16, bold=True, shorten=True))
-        row.add_widget(Text(f"Экзамен {fmt_short(s['exam'])}", fs=12, color=MUTED, halign="right",
+        row.add_widget(Text((f"Экзамен {fmt_short(s['exam'])}" if s["exam"] else "Без даты"), fs=12, color=MUTED, halign="right",
                             size_hint_x=None, width=dp(96)))
         row.add_widget(Text(f"{p}%", fs=15, bold=True, halign="right",
                             size_hint_x=None, width=dp(44)))
@@ -206,3 +221,27 @@ class NotesScreen(BaseScreen):
                               size_hint_x=None, width=dp(40)))
             c.bind(on_release=lambda *_, name=s["name"]: app().open("subject", subject=name, tab="notes"))
             g.add_widget(c)
+
+
+class SessionsScreen(BaseScreen):
+    title = "Мои сессии"
+    subtitle = "Выберите сессию или создайте новую"
+    show_nav = False
+
+    def build_body(self):
+        g = self.scroll()
+        add = PillButton(text="+ Создать сессию", bg=AC, fg=WHITE,
+                         size_hint_y=None, height=dp(52))
+        add.bind(on_release=lambda *_: app().open("session_form"))
+        g.add_widget(add)
+        for session in store.sessions:
+            card = CardButton(orientation="vertical", padding=dp(16),
+                              size_hint_y=None, height=dp(88))
+            card.add_widget(Text(session["name"], fs=18, bold=True))
+            card.add_widget(Text(f"Предметов: {len(session['subjects'])}", fs=14, color=MUTED))
+            card.bind(on_release=lambda *_, i=session["id"]: self.choose(i))
+            g.add_widget(card)
+
+    def choose(self, session_id):
+        store.select_session(session_id)
+        app().open_root("subjects")
