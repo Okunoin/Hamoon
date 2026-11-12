@@ -5,8 +5,12 @@ from kivy.uix.screenmanager import ScreenManager, SlideTransition
 from kivy.utils import platform
 
 from screens import register_screens
+from theme import BG
 
-if platform not in ("android", "ios"):
+Window.clearcolor = BG
+if platform in ("android", "ios"):
+    Window.softinput_mode = "below_target"  # клавиатура не перекрывает поле ввода
+else:
     Window.size = (390, 844)  # размер телефона для запуска на компьютере
 
 
@@ -18,6 +22,7 @@ class PlannerApp(App):
         self._ctx = {}      # контекст текущего экрана (например, предмет)
         self.sm = ScreenManager(transition=SlideTransition())
         register_screens(self.sm)  # первый добавленный экран открывается первым
+        self.sm.current_screen.refresh()
         Window.bind(on_keyboard=self._on_keyboard)
         return self.sm
 

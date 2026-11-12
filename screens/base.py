@@ -1,14 +1,14 @@
 from kivy.app import App
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
-from kivy.uix.label import Label
-from kivy.uix.screenmanager import Screen
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.screenmanager import Screen
 from kivy.uix.widget import Widget
 
-BTN_H = dp(56)
+from theme import AC, AC_SOFT, CARD, INK, LINE, MUTED
+from widgets import Card, PillButton, Text
+
 NAV_TABS = (("subjects", "Предметы"), ("calendar", "Календарь"), ("notes", "Заметки"))
 
 
@@ -17,85 +17,85 @@ def app():
 
 
 class BaseScreen(Screen):
-    """Общий каркас: верхняя панель (назад + заголовок), тело, нижние вкладки."""
+    """Каркас: шапка (назад, подзаголовок, заголовок), тело, нижние вкладки.
+
+    Экран перестраивается при каждом показе (refresh), поэтому всегда
+    показывает актуальные данные из store.
+    """
 
     title = ""
-    show_back = True   # кнопка «< Назад»
-    show_nav = False   # нижние вкладки (только у главных экранов)
+    subtitle = ""
+    show_back = False
+    show_nav = True
+    active_tab = None   # какая вкладка подсвечена: subjects / calendar / notes
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        root = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
+        root = BoxLayout(orientation="vertical")
 
-        bar = BoxLayout(size_hint_y=None, height=BTN_H, spacing=dp(8))
+        self.head = BoxLayout(orientation="vertical", size_hint_y=None,
+                              padding=[dp(20), dp(16), dp(20), dp(6)])
         if self.show_back:
-            back = Button(text="< Назад", size_hint_x=None, width=dp(110))
+            row = BoxLayout(size_hint_y=None, height=dp(44))
+            back = PillButton(text="<", fg=INK, font_size="22sp", size_hint=(None, None),
+                              size=(dp(44), dp(44)))
             back.bind(on_release=lambda *_: app().back())
-            bar.add_widget(back)
-        self.title_label = Label(text=self.title, font_size="20sp")
-        bar.add_widget(self.title_label)
-        root.add_widget(bar)
+            row.add_widget(back)
+            row.add_widget(Widget())
+            self.head.add_widget(row)
+        self.subtitle_label = Text(fs=14, color=MUTED, bold=True, size_hint_y=None, height=dp(20))
+        self.title_label = Text(fs=28, bold=True, size_hint_y=None, height=dp(40))
+        self.head.add_widget(self.subtitle_label)
+        self.head.add_widget(self.title_label)
+        self.head.height = dp(22) + dp(60) + (dp(44) if self.show_back else 0)
+        root.add_widget(self.head)
 
-        self.body = BoxLayout(orientation="vertical", spacing=dp(8))
+        self.body = BoxLayout(orientation="vertical", spacing=dp(10),
+                              padding=[dp(16), dp(4), dp(16), dp(8)])
         root.add_widget(self.body)
 
+        self.nav_buttons = {}
         if self.show_nav:
             root.add_widget(self._make_nav())
         self.add_widget(root)
-        self.build_body()
 
     # --- что переопределять в экранах ---------------------------------
     def build_body(self):
-        """Наполнить self.body кнопками и виджетами."""
+        """Наполнить self.body."""
 
     def on_context(self, **ctx):
-        """Вызывается перед показом экрана, получает данные (например, subject)."""
+        """Получить данные перед показом (например, subject, tab)."""
+
+    # --- жизненный цикл -------------------------------------------------
+    def on_pre_enter(self, *args):
+        self.refresh()
+
+    def refresh(self):
+        self.title_label.text = self.title
+        self.subtitle_label.text = self.subtitle
+        self.body.clear_widgets()
+        self.build_body()
+        for name, btn in self.nav_buttons.items():
+            on = name == self.active_tab
+            btn.set_style(bg=AC_SOFT if on else None, fg=AC if on else MUTED)
 
     # --- помощники ----------------------------------------------------
-    def set_title(self, text):
-        self.title_label.text = text
-
-    def button(self, text, on_release, parent=None):
-        btn = Button(text=text, size_hint_y=None, height=BTN_H)
-        btn.bind(on_release=lambda *_: on_release())
-        (parent or self.body).add_widget(btn)
-        return btn
-
-    def placeholder(self, text):
-        self.body.add_widget(Label(text=text))
-
-    def spacer(self):
-        self.body.add_widget(Widget())
-
-    def go(self, name, **ctx):
-        return lambda: app().open(name, **ctx)
-
-    def scroll_list(self):
-        grid = GridLayout(cols=1, spacing=dp(8), size_hint_y=None)
+    def scroll(self):
+        """Прокручиваемая колонка внутри body; возвращает контейнер для виджетов."""
+        sv = ScrollView(do_scroll_x=False, bar_width=0)
+        grid = GridLayout(cols=1, spacing=dp(10), size_hint_y=None,
+                          padding=[0, 0, 0, dp(12)])
         grid.bind(minimum_height=grid.setter("height"))
-        sv = ScrollView()
         sv.add_widget(grid)
         self.body.add_widget(sv)
         return grid
 
     def _make_nav(self):
-        nav = BoxLayout(size_hint_y=None, height=BTN_H, spacing=dp(8))
+        nav = Card(bg=CARD, radius=0, outline=None, padding=[dp(12), dp(14)], spacing=dp(8),
+                   size_hint_y=None, height=dp(76))
         for name, label in NAV_TABS:
-            b = Button(text=label)
+            b = PillButton(text=label, font_size="13sp")
             b.bind(on_release=lambda *_, n=name: app().open_root(n))
             nav.add_widget(b)
+            self.nav_buttons[name] = b
         return nav
-
-
-class SubjectBoundScreen(BaseScreen):
-    """Экран, относящийся к одному предмету (получает subject через контекст)."""
-
-    title_fmt = "{subject}"
-
-    def __init__(self, **kwargs):
-        self.subject = ""
-        super().__init__(**kwargs)
-
-    def on_context(self, subject="", **ctx):
-        self.subject = subject
-        self.set_title(self.title_fmt.format(subject=subject))
